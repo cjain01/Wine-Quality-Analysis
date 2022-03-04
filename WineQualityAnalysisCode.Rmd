@@ -1,0 +1,318 @@
+---
+title: 'Wine Quality Analysis'
+author: 'Chetali Jain'
+output:
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(include = FALSE)
+```
+
+
+```{r package import, warning= FALSE}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(Hotelling)
+library(mvnormalTest)
+library(ICSNP)
+library(kableExtra)
+library(glue)
+library(stats)
+```
+
+```{r dataset import, warning= FALSE}
+setwd("C:/Users/rahul/Desktop/machine learning/assignment 1")
+
+wine_all <- read_csv("winequality-all.csv")
+
+red_wine <- read_csv("winequality-red.csv")
+
+white_wine <- read_csv("winequality-white.csv")
+
+colnames(wine_all)
+
+```
+# Investigation Aim
+This report aims to perform Principal Component Analysis (PCA) and Hotelling $T^2$ test on data regarding the main chemical differences between
+red and white wine. Plots and summary statistics have been produced to illustrate these.
+
+
+# Background 
+The data utilized in these analysis was provided by Professor Jarvis and can also be taken from https://archive.ics.uci.edu/ml/datasets/wine+quality. 
+
+The red and white wines are the variants of Portuguese “Vinho Verde” wine. We have 1599 observations for red wine and 4898 observations for white wine. The data tells us about the chemical composition of wines. The quality variable is a subjective measurement and color variable determines the type of wine, i.e. 0 indicates white wine and 1 indicates red wine (only in wine_all data set).
+
+
+# Principal Component Analysis
+
+```{r pca}
+wine_all_pca <- princomp(wine_all[,1:11])
+summary(wine_all_pca)
+```
+# Task 1
+
+__*What is the main chemical difference between red and white wines using PCA?*__
+
+```{r summary of pca}
+summary(wine_all_pca)
+```
+
+
+After running PCA, we found out that cumulative proportion suggests a cutoff around 4 or 5 components. From 5th component onward, the proportion of variance is negligible. The summary statistics of PCA suggests that k = 5 is a good point of cut-off ; this contains majority of the information, and the remaining PC can be regarded as "noise"
+
+
+```{r pca components, include=TRUE, warning=FALSE}
+wine_all_pca <- princomp(wine_all[,1:13], cor = TRUE)
+kbl(loadings(wine_all_pca)[,1:5], caption = "PCA Components")%>%
+  kable_styling("bordered")
+```
+
+The **first component** has positive sign with fixed, volatile acidity and color, and negative for residual sugar and all the sulfur dioxide, and so reflects variation in "Acid" - "Sulfur Dioxide" in wines. This can be interpreted that in red wine(indicated as 1) there are chances of higher level of acidity and lower level of residual sugar and sulfur dioxide. On the other hand, in white wine (indicated as 0) there is lower level of acidity and higher level of sugar and sulfur dioxide.
+The **second component** reflects quality and alcohol against all other variable.
+
+
+```{r pca components visualization, include= TRUE, warning=FALSE, Eecho=FALSE,out.width='.49\\linewidth', fig.width=5, fig.height=3, fig.align = 'center'}
+pca.data <- data.frame(Colour = wine_all$colour, 
+                       Quality = wine_all$quality,
+                       X = predict(wine_all_pca)[,1], 
+                       Y = predict(wine_all_pca)[,2])
+
+
+ggplot(data=pca.data, aes(x=X, y=Y, colour = as.factor(Colour))) +
+  geom_point() +
+  xlab("PC1") +
+  ylab("PC2") +
+  theme_bw() +
+  labs(title = "PC1 vs PC2", caption = "Figure 1") +
+  scale_colour_discrete(name="Wine", labels = c("White Wine","Red Wine"))
+```
+From **Figure 1** it is noticeable that higher PC1 is indicating red wine whereas lower PC1 is indicating white wine. Therefore, the first principal component separates red wine from white wine.There are few outliers as well which can be studied in detail on the basis of their quality.
+Figure 1 and Loadings table(Table 1) reflects the difference in the level of acidity and sulfur dioxide in the wines.
+
+
+# Task 2
+
+__*State those features which are likely to be present in wines of good quality?*__
+__*Are these different for the red and white wines?*__
+
+From **Table 1** it is clear that **Component four** has a moderate negative relation (-0.499) with the quality variable whereas **component five** on the other hand has a moderate positive relation (0.443) with the quality variable.
+PC4 also has moderate negative relation with sulfur dioxide, pH and sulphates and positive relation with acidity. 
+
+```{r pca components visual, include= TRUE, warning=FALSE, Eecho=FALSE,out.width='.49\\linewidth', fig.width=7, fig.height=4, fig.align = 'center'}
+
+
+pca.data2 <- data.frame(Colour = wine_all$colour, Quality = wine_all$quality, X = predict(wine_all_pca)[,4], Y = predict(wine_all_pca)[,5])
+
+
+ggplot(data=pca.data2, aes(x=X, y=Y, colour=as.factor(Quality), shape = as.factor(Colour))) +
+  geom_point() +
+  xlab("PC4") +
+  ylab("PC5") +
+  theme_bw() +
+  labs(title = "PC4 vs PC5", caption = "Figure 2")+
+  scale_colour_discrete(name="Quality")+
+  scale_shape_discrete("Colour")
+```
+
+**Figure 2** represents lower the PC4 higher the quality of wine and lower the PC5 lower the quality of wine.From the scatterplot of the PC4 and PC5, we can see that the wines of different quality are well separated in the scatterplot. The PC5 y-axis) separates quality 5 and 6 very well, but doesn’t not perfectly separate quality 3 and 4, or quality 8 and 9.
+
+Talking about quality in comparison to type of wine, both PC4 and PC5 are weakly correlated with colour variable and thus failed to explain the difference in chemical composition for different quality individually in red and white wine.
+
+```{r eda, include=TRUE, warning=FALSE}
+#grouping data on the basis of colour
+group_data <- wine_all %>%
+            group_by(colour, quality)
+
+kbl(summarize(group_data,
+          fixed_acidity = median(`fixed acidity`),
+          volatile_acidity = median(`volatile acidity`),
+          free_sulfur = median(`free sulfur dioxide`),
+          total_sulfur = mean(`total sulfur dioxide`),
+          alcohol = median(alcohol)), caption = "Difference in Median Chemical Compostion for Red and White Wine based on Quality")%>%
+  kable_styling("bordered")
+```
+
+```{r}
+
+#mean of bad quality red wine
+wine_all %>%
+  filter((colour == 1) & (quality == c(3,4,5,6)))%>%
+  colMeans()
+#mean of good quality red wine
+wine_all %>%
+  filter((colour == 1) & (quality == c(7,8,9)))%>%
+  colMeans()
+
+
+#mean of bad quality white wine
+wine_all %>%
+  filter((colour == 0) & (quality == c(3,4,5,6)))%>%
+  colMeans()
+#mean of good quality white wine
+wine_all %>%
+  filter((colour == 0) & (quality == c(7,8,9)))%>%
+  colMeans()
+```
+
+
+But using **Table 2** it can be seen that there is a noticeable difference in the level of volatile acidity, total sulfur dioxide and free sulfur dioxide in different types of wine. 
+
+Overall, from the Figure 2 and the Loading table(Table 1), it can be implied that higher the quality of wine, higher the level of sulfur dioxide and lower the level of acidity.
+
+
+
+# Task 3
+
+__*Some further exploratory analysis, including some visualizations of aspects of the data.*__
+
+**Table 2** shows the median difference in chemical composition of red and white wine based on their quality.
+The median gap in alcohol level is potentially different as the quality of wines is improving. This is observed that better the quality of wine, higher the level of alcohol in it. Also Table 2 suggests that there is difference in the level of total sulfur dioxide as the quality improves.
+
+This can be also be shown using Boxplot for both red and white wines.
+
+```{r, include= TRUE, warning= FALSE, echo=FALSE,out.width='.49\\linewidth', fig.width=5, fig.height=2}
+#Alcohol comparision in red and white wine
+ggplot(red_wine, aes(y = `alcohol`)) + 
+    geom_boxplot(aes(color = as.factor(quality))) +
+  labs(title = "Alcohol level for Red Wine", caption = "Figure 3")+
+    scale_colour_discrete(name="Quality")
+
+
+ggplot(white_wine, aes(y = `alcohol`)) + 
+    geom_boxplot(aes(color = as.factor(quality))) +
+  labs(title = "Alcohol level for White Wine", caption = "Figure 4") +
+    scale_colour_discrete(name="Quality")
+
+#Total Sulfur Dioxide comparision in Red and White wine
+ggplot(red_wine, aes(y = `total sulfur dioxide`)) + 
+    geom_boxplot(aes(color = as.factor(quality))) +
+  labs(title = "Total Sulfur dioxide level for Red Wine", caption = "Figure 5") +
+    scale_colour_discrete(name="Quality")
+
+ggplot(white_wine, aes(y = `total sulfur dioxide`)) + 
+    geom_boxplot(aes(color = as.factor(quality))) +
+  labs(title = "Total Sulfur Dioxide level for White Wine", caption = "Figure 6") +
+    scale_colour_discrete(name="Quality")
+
+```
+**Figure 3** and **Figure 4** are representing change in the level of alcohol as the quality for red and white wines are improving respectively. It can be noticed from both the figures that as the quality for wine is improving, alcohol level is also increasing. Alcohol level in red wine whose quality is inadequate (>6) is approximately 10.26  whereas in good quality (>=7) wine it is 11.5. Similarly alcohol level in inferior white wine is roughly 10.23 and it tends to increase to 11.51 as the quality of wine improves.
+
+**Figure 5** and **Figure 6** shows variability in the level of total sulfur dioxide for red and white wine respectively. It can be noted that the magnitude of difference represented in the table 2 with respect to change in the quality can not be observed in the graph. For red wine, level of total sulfur dioxide in dis-satisfactory wine is 48.25 but as the quality improves it reduces to 35.49. In superior white wine, level of total sulfur dioxide is 142.51 whereas for lower quality it reduces to 121.50. Here we can also notice a wide difference in the level of total sulfur dioxide in both red and white wine.
+
+# Hotelling $T^2$
+
+Hotelling´s $T^2$ is for a multivariate test performed to check the differences between the mean values of two groups
+
+## Assumptions
+
+* Samples have **normal distribution** and are **independent**
+* Samples are **normally distributed** 
+   (checked using Shapiro-Wilk test)
+
+```{r}
+data.vars <- wine_all %>% select(-one_of("colour"))
+#mvnormtest::mshapiro.test(t(matrix(data.vars, nrow = 6497, ncol = 12)))
+```
+
+
+# Hotelling $T^2$ (Two Sample Test)
+
+__*Test the hypothesis that the red and white wines have the same acidity means (the variables fixed acidity, volatile acidity and pH)*__
+
+$H_o$:  group means for all response variables are equal, 
+        i.e. on an average acidity level and pH level of both the wines is same
+
+
+
+```{r hotelling T2}
+s1 = matrix(cov(red_wine[,c(1,2,9)]), ncol = 3,nrow = 3)
+s2 = matrix(cov(white_wine[,c(1,2,9)]), ncol = 3, nrow = 3)
+
+n1 = count(red_wine)
+n2 = count(white_wine)
+p <- 3
+mean1 <- matrix(colMeans(red_wine[,c(1,2,9)]))
+mean2 <- matrix(colMeans(white_wine[,c(1,2,9)]))
+
+spl <- (1598*s1 + 4897*s2)/6495
+
+t2 <- (7831902/6497)*((t(mean1 - mean2))%*%solve(spl)%*%(mean1 - mean2))
+test_stats <- t2*(n1+n2-p-1)/(p*(n1+n2-2))
+
+df1 <- p
+df2 <- n1+n2-p-1
+p_val <- 1 - pf(6948.344,3,6493)
+
+```
+
+
+```{r, include=TRUE, warning=FALSE}
+HotellingsT2(filter(wine_all, colour == "0")[, c(1,2,9)],
+             filter(wine_all, colour == "1")[, c(1,2,9)])
+```
+
+
+A p-value less than 0.05 ( in our case, p-value < 2.2e-16) is statistically significant. This indicates strong evidence against the $H_o$, as there is less than 2.2e-16% probability that the null hypothesis is correct. 
+This can be summarized by saying that there is a significant difference in the level of acidity and pH in both the wines.
+
+
+# Hotelling $T^2$ (One Sample Test)
+
+__*Check whether the corresponding means (some variable selection) for the red wine data set are equal to means of white wine.*__
+
+From the above two sample test it is proved that there is significant difference in acidity and pH level. The other main chemical composition of wine is sulfur dioxide and alcohol, so now using one sample $T^2$ test let's check whether the means of sulfur dioxide and alcohol for red wine dataset are equal to means of white wine.
+
+$H_o$ :Average sulfur dioxide and alcohol level in red wine is same as of white wine
+
+```{r hotelling t2 one sample}
+
+x <- colMeans(red_wine[,c(6,7,11)])
+y <- colMeans(white_wine[,c(6,7,11)])
+
+mean_red_white_wine <- data.frame(x= x, y= y)
+
+mu_white <- (matrix(mean_red_white_wine$y))
+mu_red <- (matrix(mean_red_white_wine$x))
+
+s <- matrix(cov(red_wine[,c(6,7,11)]), nrow = 3, ncol = 3)
+
+n <- nrow(red_wine)
+p <- 3
+
+t2 <- 1599*t(mu_red - mu_white)%*%solve(s)%*%(mu_red - mu_white)
+
+test_statistics <- ((1599 - 3)/(1598*3))*t2
+
+p_val <- 1 - pf(3464.368,3,1592) 
+
+
+```
+
+```{r,include = TRUE, warning = FALSE}
+HotellingsT2(red_wine[, c(6,7,11)], mu = mu_white, test = "f")
+```
+Again p-value is less than .05 which provides strong evidence against $H_o$. We can say that the sulfur dioxide and alcohol means for the red wine data set are not equal to the means of white wine.
+
+
+# Refrences 
+
+* Jarvis F. (2021), **MAS369/61007: Machine Learning Lecture Notes.**
+* Oakley J. and Catlin B. (2021), **Data handling, exploratory analysis, and reporting in R**. 
+URL: http://www.jeremy-oakley.staff.shef.ac.uk/mas61004/EDAtutorial/
+
+* Winston Chang, **R Graphics Cookbook**
+URL: https://r-graphics.org/
+
+* Steven Holland, **Data Analysis in the Geosciences**
+URL: http://strata.uga.edu/8370/lecturenotes/principalComponents.html
+
+* Dr Juan H Klopper, **Multivariate analysis of means for two groups**
+URL: https://rpubs.com/juanhklopper/multivariate_comparison_of_means_of_two_groups
+
+
+ 
